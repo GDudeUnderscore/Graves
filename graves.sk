@@ -1,0 +1,514 @@
+
+on load:
+    set spawn of "world" to location(0,64,0,world "world",0,0)
+
+function removeGrave(o: player, b: block, cid: num):
+    set block at {_b} to air
+    set block below {_b} to air if {gravesup::%block below {_b}%} = true                
+    delete {gravesup::%block below {_b}%}        
+    delete {unbreakable::%block at {_b}%}
+    delete {egrave::%{_o}'s uuid%::%{_cid}%}
+    delete {graveblock::%{_o}'s uuid%::%block at {_b}%}    
+    delete {grave::%{_o}'s uuid%::%{_cid}%::*}
+    delete {gravetime::%block at {_b}%}
+    delete {graveowner::%block at {_b}%}
+
+function collectGrave(p: player, b: block, t: boolean):
+    {graveowner::%block at {_b}%} is set
+    
+    set {_o} to {_p}'s uuid
+    set {_o} to {graveowner::%block at {_b}%} if time since {gravetime::%block at {_b}%} >= hour
+    set {_o} to {graveowner::%block at {_b}%} if {_p} has permission "staff.peekgrave"
+    
+    {graveblock::%{_o}'s uuid ? {_o}%::%block at {_b}%} is not set:
+        set {_since} to "%difference between an hour from {gravetime::%block at {_b}%} and now%"
+        set {_replaces::*} to " seconds/s| second/s| minutes/m| minute/m| hour/hr| days/d| day/d| months/mo| month/mo" split at "|"
+        loop {_replaces::*}:
+            set {_fromto::*} to loop-value split at "/"
+            replace all "%{_fromto::1}%" with "%{_fromto::2}%" in {_since}
+
+        send "&7This grave isn't yours! Wait &c%{_since}%&7 to steal this." to {_p}
+        stop
+
+    {_t} = false:
+        graveOpen({_p}, {_b}, ({graveowner::%block at {_b}%} parsed as offlineplayer))
+        play sound "ui.button.click" to {_p}
+    
+    {_t} = true
+    
+    loop all players:
+        (metadata "ingui" of loop-player) = block at {_b}
+        send "&cSomebody is currently using this grave!" to {_p}
+        play sound "entity.villager.no" to {_p}
+        stop
+    
+    set {_cid::*} to {graveblock::%{_o}%::%block at {_b}%} split at "|"
+    set {_cid} to {_cid::1} parsed as integer
+
+    set block at {_b} to air
+    set block below {_b} to air if {gravesup::%block below {_b}%} = true    
+    
+    play sound "item.bundle.drop_contents" to {_p}
+    make 25 of poof at {_b} with extra 0.05
+    
+    add {egrave::%{_o}%::%{_cid}%} to {_p}'s level progress
+    
+    delete {gravesup::%block below {_b}%}        
+    delete {unbreakable::%block at {_b}%}
+    delete {egrave::%{_o}%::%{_cid}%}
+    delete {graveblock::%{_o}%::%block at {_b}%}    
+    delete {gravetime::%block at {_b}%}
+    delete {graveowner::%block at {_b}%}
+    
+    loop {_p}'s inventory:
+        add 1 to {_z}
+        drop loop-slot at {_p} without velocity
+        set loop-slot to air
+        wait tick if mod({_z},4) = 0
+    loop {grave::%{_o}%::%{_cid}%::*}:
+        set slot (loop-index parsed as num) of {_p}'s inventory to {grave::%{_o}%::%{_cid}%::%loop-index%}
+        remove {grave::%{_o}%::%{_cid}%::%loop-index%} from {grave::%{_o}%::%{_cid}%::*}
+        add 1 to {_count}
+        wait tick if mod({_count},4) = 0
+    
+    delete {grave::%{_o}%::%{_cid}%::*}
+
+function graveVir(p: player, o: offlineplayer, pg: num):
+
+    create gui with virtual chest inventory with 6 rows named "&7Grave Selection Menu.":
+        set {_maxpages} to ceil(size of {graveblock::%{_o}'s uuid%::*} / 28)
+        set {_maxpages} to 1 if {_maxpages} = 0
+        make gui integers between 0 and 53 with black stained glass pane named " "
+        make gui ((integers between 10 and 16), (integers between 19 and 25), (integers between 28 and 34) and (integers between 37 and 43)) with air named " "
+        
+        make gui 4 with oak sign named " &7&n ℹ |&c Information &7&n| ℹ " with lore "%nl% &9Page Details&8:%nl%  &8• &7Current Page&8: &b%{_pg}%&8%nl%  &8• &7Total Pages&8: &b%{_maxpages}% %nl%  &8• &7Total Graves&8: &b%size of {graveblock::%{_o}'s uuid%::*}% &3☠ %nl%%nl% <##666666>Clicking on %nl% <##666666>out-of-range %nl% <##666666>grave will toggle %nl% <##666666>on live distance %nl% <##666666>tracker. %nl% "
+        
+        make gui 47 with arrow named "  &9← &7Previous  ":
+            send "&cThere isn't any previous page." if {_pg} <= 1
+            play sound "entity.villager.no" if {_pg} <= 1
+            {_pg} > 1
+            graveVir({_p}, {_o}, ({_pg} - 1))
+            play sound "ui.button.click" to {_p}
+            
+        make gui 49 with oak door named "  &9⟲ &7First Page &9⟲  ":
+            send "&cYou're already on the first page!" if {_pg} = 1
+            play sound "entity.villager.no" if {_pg} = 1
+            {_pg} != 1
+            graveVir({_p}, {_o}, 1)
+            play sound "ui.button.click" to {_p}
+            
+        make gui 51 with arrow named "  &7Next &9→  ":
+            send "&cThere isn't any previous page." if {_pg} >= {_maxpages} 
+            play sound "entity.villager.no" if {_pg} >= {_maxpages} 
+            {_pg} < {_maxpages}
+            graveVir({_p}, {_o}, ({_pg} + 1))
+            play sound "ui.button.click" to {_p}
+            
+        loop {graveblock::%{_o}'s uuid%::*}:
+            add 1 to {_c2}
+            {_c2} > (({_pg} - 1) * 28)
+
+            add 1 to {_c}
+            set {_it} to wither skeleton skull
+            set {_v::*} to loop-value split at "|"
+            set {_loc::*} to {_v::2} split at " "
+            set {_time::*} to {_v::4} split at ", "
+            set {_loc} to location(({_loc::1} parsed as num),({_loc::2} parsed as num),({_loc::3} parsed as num),world("%{_loc::4}%"))
+
+            loop all blocks in radius 7.5 around {_p}:
+                {graveblock::%{_o}'s uuid%::%loop-block%} is set
+                set {_g::*} to {graveblock::%{_o}'s uuid%::%loop-block%} split at "|"
+                {_g::1} = {_v::1}
+                set {_it} to player head
+                add nbt compound from "{SkullOwner:{Id:[I;1279311503,-758167039,-2084142551,-600306466],Properties:{textures:[{Value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDM5Mjc0ZjFmNWI2NjAyYmE5ODJjZWZiNmEzZGIwMWNhNDgyMTBhYWIzZDU2MzE3ODFhZGVlODgzMjEwOTFmMCJ9fX0=""}]}}}" to nbt compound of {_it}
+                stop loop
+                
+            set {_blocked::*} to "17,26,35,44,53,18,27,36,45,46,47,48,49,50,51,52,53" split at ","
+            while {_blocked::*} contains "%9 + {_c}%":
+                add 1 to {_c}
+                stop loop if {_c} > 53
+                
+            set {_since} to "%time since {gravetime::%block at {_loc}%}%"
+            set {_replaces::*} to " seconds/s| second/s| minute/min| hour/hr| days/d| day/d| months/mo| month/mo" split at "|"
+            loop {_replaces::*}:
+                set {_fromto::*} to loop-value-2 split at "/"
+                replace all "%{_fromto::1}%" with "%{_fromto::2}%" in {_since}
+                
+            replace all "%{_o}%" with "You" in {_v::3} if {_p} = {_o}
+            
+            delete {_l::*}
+            set {_l::1} to {_v::3}
+                
+            length of {_v::3} >= 20:
+                set {_l::1} to first 20 characters of {_v::3}
+                set {_l::2} to last (length of {_v::3} - 20) characters of {_v::3}
+                set {_l::2} to "&8..<##ad5858>%{_l::2}%.%nl%"
+                
+            else:
+                set {_l::1} to "%{_l::1}%."
+                
+            make gui 9 + {_c} with {_it} named "<##ad5858>%{_l::1} ? "wtf??"%" with lore "%{_l::2} ? ""%%nl% <##596160>&nLocation:%nl%  &8• &b%floor(({_loc::1} parsed as num))%&8, &b%floor(({_loc::2} parsed as num))%&8, &b%floor(({_loc::3} parsed as num))%%nl%  &8• &7World ""&b%{_loc::4}%&7"" %nl%%nl% <##596160>&nDeath Time:%nl%  &8• &c%{_time::1}%%nl%  &8• &c%{_time::2}% %nl%%nl% &8%{_since}%%nl% &8since this death.":
+                play sound "ui.button.click" to {_p}
+                
+                trackGrave({_p}, {_o}, ({_v::1} parsed as num)) if {_it} != player head
+                close {_p}'s inventory if {_t} != player head
+                
+                {_it} = player head
+                set {_loc::*} to {_v::2} split at " "
+                collectGrave({_p}, block at {_loc}, true)
+                graveVir({_p}, {_o}, {_pg})
+                
+            delete {_it}
+
+    open last gui to {_p} 
+
+function getDir(p: player, g: location) :: text:
+    set {_v} to (vector between {_p} and {_g})
+    return "↓" if ({_v}'s yaw) is between 0 and 89.99
+    return "←" if ({_v}'s yaw) is between 90 and 179.99
+    return "↑" if ({_v}'s yaw) is between 180 and 269.99
+    return "→"
+
+function graveOpen(p: player, b: block, o: offlineplayer):
+    loop all players where [input isn't player]:
+        (metadata "ingui" of loop-player) = block at {_b}
+        send "&cSomebody is currently using this grave!" to {_p}
+        play sound "entity.villager.no" to {_p}
+        
+        stop
+    set (metadata "ingui" of {_p}) to block at {_b}
+
+    create gui with virtual chest inventory with 6 rows named "&7Grave of &c%{graveowner::%block at {_b}%} parsed as offlineplayer%&7.":
+        set {_id::*} to {graveblock::%{_o}'s uuid%::%block at {_b}%} split at "|"
+        set {_id} to {_id::1} parsed as integer
+
+        set {_maxpages} to ceil(size of {_g::*} / 28)
+        set {_maxpages} to 1 if {_maxpages} = 0
+        
+        make gui ((integers between 36 and 44), 46 and 52) with black stained glass pane named "&f"
+        make gui (integers between 47 and 50) with white stained glass pane named " &fArmor Slot " with lore "%nl% &7This slot is used %nl% &7to display the %nl% &7armor of this %nl% &7grave. %nl%&f"
+        make gui 51 with light gray stained glass pane named " &7Offhand Slot " with lore "%nl% &7This slot is used %nl% &7to display the %nl% &7offhand of this %nl% &7grave. %nl%&f"
+
+        make gui 53 with experience bottle named "     &a&nCollect EXP&r      " with lore "%nl% &7Grave's EXP&8: %nl%  &8• &e%floor({egrave::%{_o}'s uuid%::%{_id}%}) ? 0% &7levels%nl%  &8• &e%({egrave::%{_o}'s uuid%::%{_id}%} - floor({egrave::%{_o}'s uuid%::%{_id}%})) * 100%%% &7progress %nl%&f":
+            set {egrave::%{_o}'s uuid%::%{_id}%} to 0 if {egrave::%{_o}'s uuid%::%{_id}%} is not set
+            send "&cThere isn't any experience to collect from this grave anymore." to {_p} if {egrave::%{_o}'s uuid%::%{_id}%} = 0
+            play sound "entity.villager.no" if {egrave::%{_o}'s uuid%::%{_id}%} = 0
+            
+            {egrave::%{_o}'s uuid%::%{_id}%} != 0
+            send "&7You've collected &a%floor({egrave::%{_o}'s uuid%::%{_id}%})%&7 levels and &a%({egrave::%{_o}'s uuid%::%{_id}%} - floor({egrave::%{_o}'s uuid%::%{_id}%})) * 100%%% &7of a level from this grave!" to {_p}
+            play sound "entity.player.levelup" to {_p}
+            add {egrave::%{_o}'s uuid%::%{_id}%} to {_p}'s level progress
+            remove {egrave::%{_o}'s uuid%::%{_id}%} from {egrave::%{_o}'s uuid%::%{_id}%}
+            
+            delete (metadata "ingui" of player)
+            graveOpen({_p}, {_b}, {_o})
+
+            size of {grave::%{_o}'s uuid%::%{_id}%::*} = 0
+            set {egrave::%{_o}'s uuid%::%{_id}%} to 0 if {egrave::%{_o}'s uuid%::%{_id}%} is not set
+            {egrave::%{_o}'s uuid%::%{_id}%} = 0
+            removeGrave({_o}, {_b}, {_id})
+            make 25 of poof at {_b} with extra 0.05
+            
+            close {_p}'s inventory
+
+        loop {grave::%{_o}'s uuid%::%{_id}%::*}:
+            
+            set {_slot} to (loop-index parsed as num) - 9 if (loop-index parsed as num) is between 9 and 35
+            set {_slot} to (loop-index parsed as num) + 11 if (loop-index parsed as num) is between 36 and 40
+            set {_slot} to (loop-index parsed as num) + 27 if (loop-index parsed as num) is between 0 and 8
+            
+            set {_item} to loop-value
+            set {_index} to loop-index
+
+            make gui {_slot} with {_item}:
+                play sound "item.bundle.drop_contents" to {_p}
+                delete {grave::%{_o}'s uuid%::%{_id}%::%{_index}%}
+                delete (metadata "ingui" of player)
+                
+                wait tick
+                
+                graveOpen({_p}, {_b}, {_o})
+                
+                drop {_p}'s cursor slot at {_p} if {_p}'s cursor slot != air
+                set {_p}'s cursor slot to {_item}
+
+                size of {grave::%{_o}'s uuid%::%{_id}%::*} = 0
+                
+                add {egrave::%{_o}'s uuid%::%{_id}%} to {_p}'s level progress
+                set {egrave::%{_o}'s uuid%::%{_id}%} to 0
+                removeGrave({_o}, {_b}, {_id})
+                make 25 of poof at {_b} with extra 0.05
+                
+                close {_p}'s inventory
+        
+        set {_time::*} to {_id::4} split at ", " 
+        make gui 45 with chest named " &7&n ℹ |&c Information &7&n| ℹ " with lore "%nl% &9Page Details&8:%nl%  &8• &7Total Items&8: &b%size of {grave::%{_o}'s uuid%::%{_id}%::*}%%nl%%nl% &9Time of Death&8:%nl%  &8• &7%{_time::2}%%nl%  &8• &7%{_time::1}%%nl%%nl% &8Click to collect all%nl% &8items.&r ":
+            delete (metadata "ingui" of player)
+            collectGrave({_p}, {_b}, true)
+            play sound "ui.button.click" to {_p}
+            close {_p}'s inventory
+        
+    open last gui to {_p}
+    
+function trackGrave(p: player, o: offlineplayer, i: num):
+
+    if (metadata "dtoggle" of {_p}) = true:
+        send action bar "&0&l[  &cDisabled grave distance tracker.  &0&l]" to {_p}
+        play sound "block.beacon.deactivate" to {_p}
+        delete (metadata "dtoggle" of {_p})
+        
+    else if (metadata "dtoggle" of {_p}) is not set:
+        set (metadata "dtoggle" of {_p}) to true 
+
+    (metadata "dtoggle" of {_p}) = true
+
+    loop {graveblock::%{_o}'s uuid%::*}:
+        set {_id::*} to loop-value split at "|"
+        {_i} = ({_id::1} parsed as integer)
+        set {_loc::*} to {_id::2} split at " "    
+        stop loop
+
+    ({_loc::4} parsed as world) != {_p}'s world:
+        send "&cYou must be in the same dimension as your grave!" to {_p}
+        play sound "entity.villager.no" to {_p}
+        delete (metadata "dtoggle" of {_p})
+        set {_stop} to true
+            
+    (metadata "coordhud" of {_p}) = true:
+        send "&cYou cannot be using the coordinate HUD and the grave tracker at the same time!" to {_p}
+        play sound "entity.villager.no" to {_p}
+        delete (metadata "dtoggle" of {_p})
+        set {_stop} to true
+            
+    stop if {_stop} = true
+    play sound "block.beacon.activate" to {_p}
+            
+    while (metadata "dtoggle" of {_p}) = true:
+
+        set {_loc} to location(({_loc::1} parsed as num),({_loc::2} parsed as num),({_loc::3} parsed as num),world("%{_loc::4}%"))
+        set {_ua} to true if {_p} has scoreboard tag "action_bar_busy"
+        set {_ua} to true if (metadata "usedab" of {_p}) = true
+        send action bar "&0&l[  &c☠   &7Grave's distance&8: &e&n%rounded distance between {_p} and {_loc}% blocks&7.   &c%getDir({_p}, {_loc})%  &0&l]" to {_p} if {_ua} != true
+        (rounded (distance between {_p} and {_loc})) <= 7.5:
+            send action bar "&0&l[   &7Use &8""&9&n/grave&8""&7 to collect your grave!  &0&l]" to {_p} if (metadata "usedab" of {_p}) != true
+            play sound "entity.experience_orb.pickup" with volume 1 and pitch 2 to {_p}
+            stop loop
+        wait 5 ticks
+
+    delete (metadata "dtoggle" of {_p})
+    
+on respawn:
+    {deathlog::%player's uuid%} = true
+    delete {deathlog::%player's uuid%}
+    
+    clear player's inventory
+    teleport player to player's bed if player's bed is set
+    teleport player to location(0,64,0,world "world",0,0) if player's bed isn't set
+    
+on death of player:
+    set {_dmsg} to death message
+    set {deathlog::%victim's uuid%} to true
+    wait 2 ticks
+    
+    # If the player has NO EXP or NO ITEMS.
+    set {_a} to true if victim's level >= 1
+    set {_a} to true if victim's inventory isn't empty
+    set {grc::%victim's uuid%} to {grc::%victim's uuid%} + 1 if {_a} = true
+        
+    # Setting the grave.
+    set {_c} to true if victim's inventory isn't empty
+    set {_c} to true if victim's level >= 1
+       
+    {_c} = true:
+        set {_loc} to block at victim
+        
+        set {_loc} to block below victim if block below victim is (air or short grass)
+        set {_loc} to block 2 below victim if block 2 below victim is (air or short grass)
+
+        while {_loc} isn't air or short grass:
+            set {_loc} to block above {_loc}
+            
+        block below {_loc} = (void air or air):
+            set {_loc} to block above {_loc}
+            set block below {_loc} to light gray stained glass
+            set {gravesup::%block below {_loc}%} to true
+            
+        set {_it} to player head
+        set block at {_loc} to {_it}
+        add nbt compound from "{SkullOwner:{Id:[I;1279311503,-758167039,-2084142551,-600306466],Properties:{textures:[{Value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDM5Mjc0ZjFmNWI2NjAyYmE5ODJjZWZiNmEzZGIwMWNhNDgyMTBhYWIzZDU2MzE3ODFhZGVlODgzMjEwOTFmMCJ9fX0=""}]}}}" to nbt compound of block at {_loc}
+        set block data tag "rotation" of block at {_loc} to (random integer between 0 and 9)
+        
+        set {gravetime::%block at {_loc}%} to now
+        set {graveowner::%block at {_loc}%} to victim's uuid
+        set {graveblock::%victim's uuid%::%block at {_loc}%} to "%{grc::%victim's uuid%}%|%{_loc}'s x coord% %{_loc}'s y coord% %{_loc}'s z coord% %{_loc}'s world%|%{_dmsg}%|%2 hours from now formatted human-readable as "h:mm:ss a, M/d/YY"%"
+        set {unbreakable::%block at {_loc}%} to true
+        
+        send "&7Grave's Location: &a%{_loc}'s x-coord%&7, &a%{_loc}'s y-coord%&7, &a%{_loc}'s z-coord%&7, &8(%{_loc}'s world%)&7." to victim
+        
+    # Linking inventory items to the grave.
+    if victim's inventory isn't empty:
+        loop victim's inventory:
+            set {grave::%victim's uuid%::%{grc::%victim's uuid%}%::%loop-slot's index%} to loop-value 
+            add cursor slot of victim to {grave::%victim's uuid%::%{grc::%victim's uuid%}%::*} if cursor slot of victim != air
+        
+    # Linking experience to the grave.
+    set {egrave::%victim's uuid%::%{grc::%victim's uuid%}%} to ((victim's level + victim's level progress) / 2) if victim's level >= 1
+        
+    set (victim's level progress and victim's level) to 0
+    clear victim's inventory
+    force victim to respawn
+    
+function teleportEffect(p: location):
+    set {_loc} to {_p}
+    
+    set {_s::*} to "entity.enderman.teleport|entity.warden.heartbeat|block.portal.trigger|block.respawn_anchor.deplete" split at "|"
+    loop {_s::*}:
+        play sound loop-value at {_loc}
+    
+    set {_p::*} to "70/poof/0.3|500/enchant/1|40/sculk_charge_pop/0.2|1/sonic boom/1" split at "|"
+    loop {_p::*}:
+        delete {_d::*}
+        set {_d::*} to loop-value split at "/"
+        make ({_d::1} parsed as number) of ({_d::2} parsed as particle) at {_loc} with extra ({_d::3} parsed as number)
+
+    make 20 of dust using dustOption(purple, 3) at {_loc} with extra 1
+    strike lightning effect at {_loc}
+    
+    loop 5 times:
+        make 15 of block particle using pink concrete at {_loc} with extra 0.6   
+        make 30 of sculk_charge_pop at {_loc} with extra 0.2
+        wait 5 ticks
+
+on rightclick with recovery compass:
+    send "&cYou don't have any graves active!" if {graveblock::%player's uuid%::*} isn't set
+    play sound "entity.villager.no" to player if {graveblock::%player's uuid%::*} isn't set
+    {graveblock::%player's uuid%::*} is set
+
+    set (metadata "rccd" of player) to 15 seconds ago if (metadata "rccd" of player) isn't set
+    send "&cThis is on cooldown for &4%difference between (15 seconds after (metadata "rccd" of player)) and now%&c!" to player if time since (metadata "rccd" of player) < 15 seconds
+    time since (metadata "rccd" of player) >= 15 seconds
+
+    remove recovery compass from player
+    
+    loop {graveblock::%player's uuid%::*}:
+        set {_ind::*} to loop-value split at "|"
+        
+        ({_ind::1} parsed as number) > {_h} ? 0
+        set {_h} to ({_ind::1} parsed as number)
+        set {_l::*} to {_ind::2} split at " "
+
+    teleportEffect(player)
+    apply darkness without particles to player for 2.5 seconds replacing the existing effect
+    send "&7You've &5teleported&7 to your latest grave, &4although you have been weakened&7.."
+    teleport player to location(({_l::1} parsed as number),({_l::2} parsed as number),({_l::3} parsed as number),world {_l::4})
+    set (metadata "rccd" of player) to now
+    teleportEffect(player)
+    
+    loop 10 times:
+        remove 0.5 from player's hunger
+        mod(loop-number, 2) = 0
+        player's health > 2
+    
+        damage player by 1
+        set player's invulnerability ticks to 1
+        make 60 of block particle using redstone block above player
+        play sound "entity.splash_potion.break" at player
+        
+        wait 2 ticks
+    
+# Developer only command. (Used for deleting graves for debug or bugging while testing.)
+command /deletegraves [<text>]:
+    permission: op
+    trigger:
+        loop all offline players:
+            loop {graveblock::%loop-value's uuid%::*}:
+                set {_det::*} to loop-value-2 split at "|"
+                set {_loc::*} to {_det::2} split at " "
+                set {_loc} to location(({_loc::1} parsed as num),({_loc::2} parsed as num),({_loc::3} parsed as num),world("%{_loc::4}%"))
+                set block at {_loc} to air
+                set block below {_loc} to air if {gravesup::%block below {_loc}%} = true        
+        
+        delete ({egrave::*}, {grave::*}, {grc::*}, {gravesup::*}, {gravetime::*}, {graveowner::*}, {unbreakable::*} and {graveblock::*})
+
+# Command to allow staff members to look into other player's graves.
+command /gravepeek <offlineplayer>:
+    permission: staff.peek
+    permission message: &cNo permission!
+    usage: &cUsage&8: &c/gravepeek <player>
+    trigger:
+        send "&cThis player hasn't played before!" to player if arg-1 hasn't played before
+        arg-1 has played before
+    
+        graveVir(player, arg-1, 1)
+        send "&7Peeking in &e%arg-1%&7's grave." to player 
+
+# Virutal grave access via command.
+command /grave [<text>]:
+    aliases: graves, g
+    trigger:
+        play sound "ui.button.click" to player
+        graveVir(player, player, 1)
+
+on right click on player head:
+    set {_c} to false
+    set {_c} to true if player is sneaking
+    
+    {graveowner::%event-block%} != player's uuid:
+        send "&eSince you are a staff member, you can look through another person's grave." to player if player has permission "staff.peekgrave"
+        
+    collectGrave(player, event-block, {_c})
+    cancel event
+
+function explodePrev(b: block):
+    set {_block} to type of block below block at {_b}
+    set block at {_b} to air
+    set block below block at {_b} to air
+    
+    wait tick
+    
+    set {_it} to player head
+    set block at {_b} to {_it}
+    add nbt compound from "{SkullOwner:{Id:[I;1279311503,-758167039,-2084142551,-600306466],Properties:{textures:[{Value:""eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDM5Mjc0ZjFmNWI2NjAyYmE5ODJjZWZiNmEzZGIwMWNhNDgyMTBhYWIzZDU2MzE3ODFhZGVlODgzMjEwOTFmMCJ9fX0=""}]}}}" to nbt compound of block at {_b}
+    set block data tag "rotation" of block at {_b} to (random integer between 0 and 9)
+            
+    set block below {_b} to {_block}
+    set block at {_b} to {_it}
+
+on inventory close:
+    delete (metadata "ingui" of player)
+
+on explode:
+    loop exploded blocks where [{unbreakable::%input%} is set]:
+        explodePrev(loop-block)
+
+# Disabled skull breaking events.
+on break of player head:
+    cancel event if {unbreakable::%event-block%} is set
+
+on flow:
+    cancel event if {unbreakable::%future event-block%} is set
+    
+on place:
+    cancel event if {unbreakable::%future event-block%} is set
+        
+        
+# Disable actionbar things.
+on death of player:
+    set (metadata "usedab" of victim) to true
+    wait 1 second
+    delete (metadata "usedab" of victim) 
+    
+on consume:
+    set (metadata "usedab" of player) to true
+    wait 1 second
+    delete (metadata "usedab" of player)
+ 
+on rightclick on armor stand:
+    set (metadata "usedab" of player) to true
+    wait 1 second
+    delete (metadata "usedab" of player)
+    
+on rightclick on any bed:
+    set (metadata "usedab" of player) to true
+    wait 1 second
+    delete (metadata "usedab" of player)
