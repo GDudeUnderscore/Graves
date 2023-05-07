@@ -20,7 +20,7 @@ function collectGrave(p: player, b: block, t: boolean):
     set {_o} to {graveowner::%block at {_b}%} if time since {gravetime::%block at {_b}%} >= hour
     set {_o} to {graveowner::%block at {_b}%} if {_p} has permission "staff.peekgrave"
     
-    {graveblock::%{_o}'s uuid ? {_o}%::%block at {_b}%} is not set:
+    {graveblock::%{_o}%::%block at {_b}%} is not set:
         set {_since} to "%difference between an hour from {gravetime::%block at {_b}%} and now%"
         set {_replaces::*} to " seconds/s| second/s| minutes/m| minute/m| hour/hr| days/d| day/d| months/mo| month/mo" split at "|"
         loop {_replaces::*}:
