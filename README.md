@@ -7,3 +7,7 @@
    - Owehttamy (Owehttamy#0001)
    - Chrishours (chrishours#0001)
    
+# Required Addons
+   - SkBee
+   - skript-gui (vanilla guis are shit cant change my mind)
+   
